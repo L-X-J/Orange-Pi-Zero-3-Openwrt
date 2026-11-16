@@ -4,16 +4,16 @@
 
 ## 说明
 
-- 源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) master 分支（内核 6.18）
-- **Wi-Fi 已支持**：板载 AW859A（Unisoc UWE5622）芯片。ImmortalWrt 内置该驱动的 OpenWrt 移植包（`kmod-uwe5622` + `uwe5622-firmware`）以及 Zero 3 的 Wi-Fi 设备树补丁，固件开箱即有 `wlan0`（支持 2.4G/5G，802.11 a/b/g/n/ac），已附带 `wpad` 无线配置组件。
-- 插件与 [Orange-Pi-Zero-ZeroPlus-Openwrt](https://github.com/7noemo/Orange-Pi-Zero-ZeroPlus-Openwrt) 保持一致：OpenClash、PassWall / PassWall2、SSR+、aria2 / AriaNg、Docker、Samba、adbyby、网易云音乐解锁、ttyd 等，另外新增了 UPnP、WOL 网络唤醒、ZeroTier、htop、iperf3。
-- **iStoreOS 风格新手友好体验**：
-  - **iStore 应用商店**（`luci-app-store`）：LuCI 内一键安装/卸载插件，依赖自动处理，商店保持空置、按需安装
-  - **快捷向导首页**（`luci-app-quickstart`）：网络向导 + 常用功能快捷入口，新手不碰命令行也能完成组网
-  - **默认中文界面**：LuCI 简体中文语言包开箱即用
-  - 1GB 及以上内存版本可直接在商店安装 Docker 类应用；固件本身已内置 Docker
+- 源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 分支（Linux 6.6 LTS）。不再跟随 6.18 的 `master`，以避开旧固件在 `S19firewall` 阶段触发的 `__slab_free` panic。
+- 定位：**Orange Pi Zero 3 1GB 版专用精简代理软路由**。固件只保留代理栈、板载 Wi-Fi、iStore/quickstart、ttyd、UPnP、htop、iperf3，已剔除 Docker、Samba、aria2/AriaNg、adbyby、网易云解锁等与翻墙无关的重型套件。
+- 代理插件：**OpenClash（核心）**、PassWall、PassWall2、SSR+，以及 `xray-core`、`sing-box`、`chinadns-ng`、`dns2socks`、`ipt2socks`、nftables TProxy 内核模块等依赖。
+- 内存优化：默认启用 `zram-swap`（`zram-swap` + `kmod-zram`），在 OpenClash 更新规则或大流量代理时以压缩内存充当 swap，降低 1GB 版 OOM 风险。
+- **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；稳定组网仍建议以有线为主。
+- **iStoreOS 风格体验**：iStore 应用商店（`luci-app-store`）+ 快捷向导首页（`luci-app-quickstart`）+ 简体中文界面（`luci-i18n-base-zh-cn` / `LUCI_LANG_zh_Hans`）。商店保持空置、按需安装，不会把 Docker 等重型应用预装进 1GB 内存。
 - 固件下载请前往 **Releases** 列表
-- 默认 IP：`192.168.1.1`
+- 默认 IP：`192.168.44.1`
+
+> 注意：`luci-app-store` / `luci-app-quickstart` 与 `quickstart` 来自 `kenzok8/openwrt-packages`，24.10 上游 luci 已不再提供；`feeds.conf.default` 把它们排在 24.10 feeds 之后，重复包（xray-core、sing-box、openclash、passwall 等）仍使用 24.10 版本，避免内核/ABI 串版本。
 
 ## 1GB / 1.5GB 内存版（起不来先看这里）
 
@@ -22,8 +22,9 @@
 
 - 老 U-Boot（OpenWrt 23.05 / 24.10 用的 2024.01）经常把 **1GB 认成 2GB**，内核按 2GB 建页表，
   一碰到 1GB 以上的地址就 panic / 卡死；1.5GB 板更典型（已知问题，见 OpenWrt #18087、DietPi #7242）。
-- 本仓用的 U-Boot 是 **2026.04**，已换成自动探测 rank / 位宽 / 行列地址，并对 1.5GB 这类
-  非 2 的幂容量做截断，上述误判基本消失。所以"1GB 版本一律不能刷"这个说法对现在的镜像是**不成立**的。
+- 本仓回到 `openwrt-24.10` 后，U-Boot 由该分支的 sunxi 目标提供，仍是 **2024.01** 一代，
+  因此 1GB 误判风险依然存在；**不要**把它当成"1GB 版随便刷"的保证。串口看到 `DRAM: 2048 MiB`
+  而板子是 1GB 时，先加 `mem=1024M` 救急，长期方案是换用新版 U-Boot。
 
 仍然起不来时，接串口（**115200 8N1**，Zero 3 的 debug UART 是板边 3 pin）看前几行，按现象分三类：
 
@@ -55,6 +56,7 @@ Fork 后修改 `orange-pi-zero3.config` 中的 `CONFIG_PACKAGE_*` 即可。
 - [immortalwrt/immortalwrt](https://github.com/immortalwrt/immortalwrt)
 - [coolsnowwolf/lede](https://github.com/coolsnowwolf/lede)
 - [kenzok8/openwrt-packages](https://github.com/kenzok8/openwrt-packages)
+- [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi)（AW859A / UWE5622 的 24.10/6.6 驱动 backport）
 
 ## License
 

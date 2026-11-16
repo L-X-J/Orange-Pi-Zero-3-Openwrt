@@ -1,6 +1,11 @@
 #
-# Build OpenWrt firmware for Orange Pi Zero 3 (Allwinner H618)
-# Based on ImmortalWrt (built-in AW859A / UWE5622 Wi-Fi driver support)
+# Build OpenWrt firmware for Orange Pi Zero 3 (Allwinner H618, 1GB)
+# Base: ImmortalWrt openwrt-24.10 (Linux 6.6 LTS)
+# Role: low-memory proxy / "science" router (OpenClash + PassWall + SSR+)
+#
+# The old master build (Linux 6.18) hit a __slab_free panic in S19firewall.
+# Staying on the 24.10 stable branch gives us the 6.6 LTS kernel and a
+# firewall4/nftables userland that is actually tested with this target.
 #
 
 name: Build OpenWrt Zero 3
@@ -14,7 +19,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: master
+  REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: orange-pi-zero3.config
   DIY_P1_SH: diy-part1.sh
@@ -67,6 +72,16 @@ jobs:
         git clone --depth 1 --filter=blob:none "$REPO_URL" -b "$REPO_BRANCH" openwrt
         ln -sf /workdir/openwrt "$GITHUB_WORKSPACE/openwrt"
 
+    - name: Verify source branch and kernel
+      run: |
+        cd openwrt
+        branch="$(git branch --show-current)"
+        echo "source branch: ${branch:-<detached>}"
+        [ "$branch" = "$REPO_BRANCH" ] || { echo "FAIL: expected $REPO_BRANCH, got ${branch:-<detached>}"; exit 1; }
+        [ -f include/kernel-6.6 ] || { echo "FAIL: include/kernel-6.6 missing (not a 6.6 tree)"; exit 1; }
+        grep -q '^LINUX_VERSION-6.6' include/kernel-6.6 || { echo "FAIL: 6.6 kernel version marker missing"; exit 1; }
+        echo "OK: ImmortalWrt openwrt-24.10 / Linux 6.6 LTS"
+
     - name: Load custom feeds
       run: |
         [ -e "$FEEDS_CONF" ] && mv "$FEEDS_CONF" openwrt/feeds.conf.default
@@ -96,34 +111,61 @@ jobs:
         make download -j$(nproc) || make download -j8 V=s
         find dl -size -1024c -delete
 
-    - name: Verify iStore deps (TAR_XZ / xz-utils guard)
+    - name: Verify iStore / quickstart dependency guard
       run: |
         cd openwrt
-        echo "--- TAR_XZ / tar / xz-utils definitions ---"
+        echo "--- tar / xz-utils definitions ---"
         grep -nE "^[[:space:]]*config PACKAGE_(TAR_XZ|tar|xz-utils)[[:space:]]*$" tmp/.config-package.in | head -5 || echo "no definitions"
         echo "--- .config state ---"
         grep -E "^CONFIG_PACKAGE_(luci-app-store|luci-app-quickstart|quickstart|xz-utils)=" .config || echo "MISSING FROM .config"
-        echo "--- is not set? ---"
-        grep -E "^# CONFIG_PACKAGE_(luci-app-store|luci-app-quickstart) is not set" .config || echo "(not listed as unset)"
+        grep -q "^CONFIG_PACKAGE_luci-app-store=y" .config
+        grep -q "^CONFIG_PACKAGE_luci-app-quickstart=y" .config
+        grep -q "^CONFIG_PACKAGE_xz-utils=y" .config
+        echo "OK: iStore + quickstart + xz-utils selected"
 
     - name: Verify key packages in .config
       run: |
         cd openwrt
         fail=0
-        for p in luci-app-store luci-app-quickstart luci-i18n-base-zh-cn; do
+        required="
+          luci-app-openclash luci-app-passwall luci-app-passwall2 luci-app-ssr-plus
+          luci-app-store luci-app-quickstart luci-app-ttyd luci-app-upnp
+          luci-i18n-base-zh-cn htop iperf3 zram-swap
+          kmod-uwe5622 uwe5622-firmware xray-core sing-box chinadns-ng dns2socks
+        "
+        for p in $required; do
           if grep -q "^CONFIG_PACKAGE_$p=y" .config; then
             echo "OK: $p enabled"
           elif grep -q "^# CONFIG_PACKAGE_$p is not set" .config; then
             echo "FAIL: $p exists but was dropped by defconfig (unmet dependency):"
-            grep -A30 "^config PACKAGE_$p\$" tmp/.config-package.in | head -35
+            grep -A30 "^config PACKAGE_$p\$" tmp/.config-package.in | head -35 || true
             fail=1
           else
             echo "FAIL: $p not found in package metadata (feed not installed?)"
             fail=1
           fi
         done
-        grep -q "^CONFIG_LUCI_LANG_zh_Hans=y" .config && echo "OK: LuCI zh_Hans language enabled"
+        grep -q "^CONFIG_LUCI_LANG_zh_Hans=y" .config || { echo "FAIL: LuCI zh_Hans disabled"; fail=1; }
+        grep -q "^CONFIG_TARGET_sunxi_cortexa53_DEVICE_xunlong_orangepi-zero3=y" .config || { echo "FAIL: Zero 3 target lost"; fail=1; }
+        grep -q "^CONFIG_TARGET_ROOTFS_PARTSIZE=2048" .config || { echo "FAIL: rootfs size changed"; fail=1; }
         [ "$fail" -eq 0 ] || exit 1
+        echo "OK: all required proxy/target packages present"
+
+    - name: Verify bloatware is gone
+      run: |
+        cd openwrt
+        fail=0
+        for p in docker dockerd containerd runc luci-app-dockerman \
+                 samba4-server luci-app-samba4 \
+                 aria2 luci-app-aria2 ariang \
+                 luci-app-unblockneteasemusic; do
+          if grep -q "^CONFIG_PACKAGE_$p=y" .config; then
+            echo "FAIL: $p must not be selected"
+            fail=1
+          fi
+        done
+        [ "$fail" -eq 0 ] && echo "OK: no Docker/Samba/aria2/unblock packages selected"
+        exit "$fail"
 
     - name: Compile the firmware
       id: compile
@@ -170,10 +212,11 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> "$GITHUB_OUTPUT"
         touch release.txt
-        echo "- Orange Pi Zero 3 (H618) / ImmortalWrt" >> release.txt
-        echo "- 内置 AW859A (UWE5622) Wi-Fi 驱动 + 固件" >> release.txt
-        echo "- 1GB/1.5GB/2GB/4GB 通用镜像；U-Boot 2026.04 自动探测内存容量" >> release.txt
-        echo "- 若无法启动：接串口 115200 看 DRAM 那一行，排查表见 README" >> release.txt
+        echo "- Orange Pi Zero 3 (H618) / ImmortalWrt openwrt-24.10 (Linux 6.6 LTS)" >> release.txt
+        echo "- 精简代理固件：OpenClash / PassWall / PassWall2 / SSR+，默认 LAN 192.168.44.1" >> release.txt
+        echo "- 1GB 内存优化：zram-swap 已启用；已移除 Docker / Samba / aria2 / adbyby / 网易云解锁" >> release.txt
+        echo "- 板载 AW859A (UWE5622) Wi-Fi 驱动 + 固件（24.10/6.6 backport）" >> release.txt
+        echo "- 若 1GB 版无法启动：接串口 115200 看 DRAM 那一行，排查表见 README" >> release.txt
         echo "status=success" >> "$GITHUB_OUTPUT"
 
     - name: Upload firmware to release

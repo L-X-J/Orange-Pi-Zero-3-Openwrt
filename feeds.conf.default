@@ -1,7 +1,21 @@
-src-git packages https://github.com/immortalwrt/packages.git
-src-git luci https://github.com/immortalwrt/luci.git
-src-git routing https://github.com/openwrt/routing.git
-src-git telephony https://github.com/openwrt/telephony.git
-src-git video https://github.com/openwrt/video.git
-src-git kenzo https://github.com/kenzok8/openwrt-packages
-src-git small https://github.com/kenzok8/small
+# ImmortalWrt openwrt-24.10 / Linux 6.6 LTS
+#
+# Pin the upstream feeds to the same branch as the source tree. Mixing a 24.10
+# tree with master feeds is what pulled 6.18-era kernel/LuCI metadata into the
+# old build.
+src-git packages https://github.com/immortalwrt/packages.git;openwrt-24.10
+src-git luci https://github.com/immortalwrt/luci.git;openwrt-24.10
+src-git routing https://github.com/openwrt/routing.git;openwrt-24.10
+
+# Third-party proxy feeds (these repositories only have a master branch).
+# Keep them AFTER the 24.10 feeds: scripts/feeds installs in file order, so the
+# 24.10 versions of duplicate package names (xray-core, sing-box,
+# luci-app-openclash, luci-app-passwall, ...) win. The rolling feeds then only
+# contribute packages that 24.10 does not ship:
+#   small -> luci-app-passwall2, luci-app-ssr-plus
+#   kenzo -> luci-app-store (iStore), luci-app-quickstart, quickstart, taskd
+src-git kenzo https://github.com/kenzok8/openwrt-packages.git
+src-git small https://github.com/kenzok8/small.git
+
+# telephony / video are intentionally not fetched: nothing in the proxy-only
+# image needs them and they noticeably slow down every cloud build.
