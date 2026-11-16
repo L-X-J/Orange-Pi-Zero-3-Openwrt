@@ -89,6 +89,18 @@ jobs:
         cd openwrt
         "$GITHUB_WORKSPACE/$DIY_P1_SH"
 
+    - name: Validate feeds.conf.default
+      run: |
+        cd openwrt
+        # scripts/feeds strips comments with s/#.+$//, so a bare "#" line is
+        # NOT stripped and is parsed as a feed entry -> "Syntax error".
+        if grep -n '^#$' feeds.conf.default; then
+          echo "FAIL: bare '#' comment line in feeds.conf.default"
+          exit 1
+        fi
+        ./scripts/feeds list -n
+        echo "OK: feeds.conf.default parsed"
+
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 

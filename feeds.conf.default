@@ -1,5 +1,4 @@
 # ImmortalWrt openwrt-24.10 / Linux 6.6 LTS
-#
 # Pin the upstream feeds to the same branch as the source tree. Mixing a 24.10
 # tree with master feeds is what pulled 6.18-era kernel/LuCI metadata into the
 # old build.
