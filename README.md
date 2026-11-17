@@ -6,14 +6,14 @@
 
 - 源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 分支（Linux 6.6 LTS）。不再跟随 6.18 的 `master`，以避开旧固件在 `S19firewall` 阶段触发的 `__slab_free` panic。
 - 定位：**Orange Pi Zero 3 1GB 版专用精简代理软路由**。固件只保留代理栈、板载 Wi-Fi、iStore/quickstart、ttyd、UPnP、htop、iperf3，已剔除 Docker、Samba、aria2/AriaNg、adbyby、网易云解锁等与翻墙无关的重型套件。
-- 代理插件：**OpenClash（核心）**、PassWall、PassWall2、SSR+，以及 `xray-core`、`sing-box`、`chinadns-ng`、`dns2socks`、`ipt2socks`、nftables TProxy 内核模块等依赖。
+- 代理插件：**只保留 OpenClash**（Clash Meta 内核），以及 `dnsmasq-full`、`ruby`、`ip-full`、nftables TProxy 等必要依赖。PassWall / PassWall2 / SSR+ / xray / sing-box 等全部移除，减少固件体积和后台进程。
 - 内存优化：默认启用 `zram-swap`（`zram-swap` + `kmod-zram`），在 OpenClash 更新规则或大流量代理时以压缩内存充当 swap，降低 1GB 版 OOM 风险。
 - **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；如果无线不稳定，可以加 USB 网卡扩展有线 LAN（单网口已经作为 WAN）。
 - **iStoreOS 风格体验**：iStore 应用商店（`luci-app-store`）+ 快捷向导首页（`luci-app-quickstart`）+ 简体中文界面（`luci-i18n-base-zh-cn` / `LUCI_LANG_zh_Hans`）。商店保持空置、按需安装，不会把 Docker 等重型应用预装进 1GB 内存。
 - 固件下载请前往 **Releases** 列表
 - 默认 IP：`192.168.44.1`（**Wi-Fi LAN**）；板载网口 `eth0` 作为 **WAN** 接光猫
 
-> 注意：`luci-app-store` / `luci-app-quickstart` 与 `quickstart` 来自 `kenzok8/openwrt-packages`，24.10 上游 luci 已不再提供；`feeds.conf.default` 把它们排在 24.10 feeds 之后，重复包（xray-core、sing-box、openclash、passwall 等）仍使用 24.10 版本，避免内核/ABI 串版本。
+> 注意：`luci-app-store` / `luci-app-quickstart` 与 `quickstart` 来自 `kenzok8/openwrt-packages`，24.10 上游 luci 已不再提供；OpenClash 来自 24.10 luci feed。`kenzok8/small` feed 已整个移除。
 
 ## 网络拓扑（单网口，务必看）
 
@@ -57,6 +57,43 @@ uci commit network
 wifi reload
 ```
 
+
+## CPU 占用 100% 排查
+
+固件裁剪只能减少“没在运行”的包，CPU 100% 需要先看是哪个进程/内核线程。登录后执行：
+
+```sh
+top -bn1 | head -30
+ps w | grep -E 'clash|openclash|quickstart|taskd|dnsmasq|hostapd|sprdwl'
+dmesg | grep -iE 'sprdwl|tx err|wcn' | tail -30
+```
+
+按结果处理：
+
+- `ksoftirqd` / `sprdwl` 高：UWE5622 Wi-Fi 驱动在 AP 模式下忙。先用 2.4G 试试：
+
+  ```sh
+  uci set wireless.radio0.band='2g'
+  uci set wireless.radio0.channel='6'
+  uci set wireless.radio0.htmode='HT40'
+  uci commit wireless
+  wifi reload
+  ```
+
+  仍高的话，用串口执行 `wifi down` 对比 CPU；如果掉下来，就是无线驱动问题，建议加 USB 网卡做 LAN。
+
+- `quickstart` 高：iStore 快捷向导后台（`quickstart serve`）。不用向导可以停掉：
+
+  ```sh
+  /etc/init.d/quickstart stop
+  /etc/init.d/quickstart disable
+  ```
+
+- `clash` / `openclash` 高：OpenClash 已启用但规则/订阅/DNS 有环路，先在 LuCI 停止 OpenClash，或串口 `/etc/init.d/openclash stop` 对比。
+
+- `dnsmasq` 高：通常是 OpenClash 的 DNS 劫持/上游配置成环，检查 OpenClash 的 DNS 设置。
+
+- `taskd`/`istore`：iStore 本身很轻，但如果确认是它，下一版可以把 iStore/quickstart 一并裁掉。
 
 ## 1GB / 1.5GB 内存版（起不来先看这里）
 

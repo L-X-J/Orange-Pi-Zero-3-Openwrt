@@ -4,17 +4,11 @@
 # old build.
 src-git packages https://github.com/immortalwrt/packages.git;openwrt-24.10
 src-git luci https://github.com/immortalwrt/luci.git;openwrt-24.10
-src-git routing https://github.com/openwrt/routing.git;openwrt-24.10
 
-# Third-party proxy feeds (these repositories only have a master branch).
-# Keep them AFTER the 24.10 feeds: scripts/feeds installs in file order, so the
-# 24.10 versions of duplicate package names (xray-core, sing-box,
-# luci-app-openclash, luci-app-passwall, ...) win. The rolling feeds then only
-# contribute packages that 24.10 does not ship:
-#   small -> luci-app-passwall2, luci-app-ssr-plus
-#   kenzo -> luci-app-store (iStore), luci-app-quickstart, quickstart, taskd
+# Only third-party feed left: iStore / quickstart, which 24.10 upstream luci
+# no longer ships. OpenClash itself comes from the 24.10 luci feed.
+# The kenzok8/small feed and all PassWall/SSR+ sources were removed.
 src-git kenzo https://github.com/kenzok8/openwrt-packages.git
-src-git small https://github.com/kenzok8/small.git
 
-# telephony / video are intentionally not fetched: nothing in the proxy-only
-# image needs them and they noticeably slow down every cloud build.
+# routing / telephony / video are intentionally not fetched: this image is
+# OpenClash-only and does not select packages from them.

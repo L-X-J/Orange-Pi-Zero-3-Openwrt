@@ -140,10 +140,10 @@ jobs:
         cd openwrt
         fail=0
         required="
-          luci-app-openclash luci-app-passwall luci-app-passwall2 luci-app-ssr-plus
+          luci-app-openclash
           luci-app-store luci-app-quickstart luci-app-ttyd luci-app-upnp
           luci-i18n-base-zh-cn htop iperf3 zram-swap
-          kmod-uwe5622 uwe5622-firmware xray-core sing-box chinadns-ng dns2socks
+          kmod-uwe5622 uwe5622-firmware
         "
         for p in $required; do
           if grep -q "^CONFIG_PACKAGE_$p=y" .config; then
@@ -161,12 +161,13 @@ jobs:
         grep -q "^CONFIG_TARGET_sunxi_cortexa53_DEVICE_xunlong_orangepi-zero3=y" .config || { echo "FAIL: Zero 3 target lost"; fail=1; }
         grep -q "^CONFIG_TARGET_ROOTFS_PARTSIZE=2048" .config || { echo "FAIL: rootfs size changed"; fail=1; }
         [ "$fail" -eq 0 ] || exit 1
-        echo "OK: all required proxy/target packages present"
+        echo "OK: all required OpenClash/target packages present"
 
-    - name: Verify bloatware is gone
+    - name: Verify removed packages are gone
       run: |
         cd openwrt
         fail=0
+        # heavy services
         for p in docker dockerd containerd runc luci-app-dockerman \
                  samba4-server luci-app-samba4 \
                  aria2 luci-app-aria2 ariang \
@@ -176,7 +177,17 @@ jobs:
             fail=1
           fi
         done
-        [ "$fail" -eq 0 ] && echo "OK: no Docker/Samba/aria2/unblock packages selected"
+        # proxy stack other than OpenClash
+        for p in luci-app-passwall luci-app-passwall2 luci-app-ssr-plus \
+                 xray-core sing-box chinadns-ng dns2socks dns2tcp microsocks \
+                 ipt2socks v2ray-geoip v2ray-geosite shadowsocks-rust-sslocal \
+                 haproxy tcping geoview; do
+          if grep -q "^CONFIG_PACKAGE_$p=y" .config; then
+            echo "FAIL: $p must not be selected (OpenClash-only image)"
+            fail=1
+          fi
+        done
+        [ "$fail" -eq 0 ] && echo "OK: no Docker/Samba/aria2/extra proxy stack selected"
         exit "$fail"
 
     - name: Compile the firmware
@@ -225,7 +236,8 @@ jobs:
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> "$GITHUB_OUTPUT"
         touch release.txt
         echo "- Orange Pi Zero 3 (H618) / ImmortalWrt openwrt-24.10 (Linux 6.6 LTS)" >> release.txt
-        echo "- 精简代理固件：OpenClash / PassWall / PassWall2 / SSR+，默认 LAN 192.168.44.1" >> release.txt
+        echo "- OpenClash-only 精简代理固件，默认 LAN 192.168.44.1" >> release.txt
+        echo "- 已移除 PassWall / PassWall2 / SSR+ / xray / sing-box 等额外代理栈" >> release.txt
         echo "- 1GB 内存优化：zram-swap 已启用；已移除 Docker / Samba / aria2 / adbyby / 网易云解锁" >> release.txt
         echo "- 板载 AW859A (UWE5622) Wi-Fi 驱动 + 固件（24.10/6.6 backport）" >> release.txt
         echo "- 若 1GB 版无法启动：接串口 115200 看 DRAM 那一行，排查表见 README" >> release.txt
