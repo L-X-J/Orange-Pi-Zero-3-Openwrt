@@ -11,9 +11,52 @@
 - **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；稳定组网仍建议以有线为主。
 - **iStoreOS 风格体验**：iStore 应用商店（`luci-app-store`）+ 快捷向导首页（`luci-app-quickstart`）+ 简体中文界面（`luci-i18n-base-zh-cn` / `LUCI_LANG_zh_Hans`）。商店保持空置、按需安装，不会把 Docker 等重型应用预装进 1GB 内存。
 - 固件下载请前往 **Releases** 列表
-- 默认 IP：`192.168.44.1`
+- 默认 IP：`192.168.44.1`（**Wi-Fi LAN**）；板载网口 `eth0` 作为 **WAN** 接光猫
 
 > 注意：`luci-app-store` / `luci-app-quickstart` 与 `quickstart` 来自 `kenzok8/openwrt-packages`，24.10 上游 luci 已不再提供；`feeds.conf.default` 把它们排在 24.10 feeds 之后，重复包（xray-core、sing-box、openclash、passwall 等）仍使用 24.10 版本，避免内核/ABI 串版本。
+
+## 网络拓扑（单网口，务必看）
+
+Zero 3 只有一个以太网口，而 24.10 的 sunxi 默认把 `eth0` 放进 `br-lan`（相当于交换机/AP）。这样把光猫插到网口后，光猫的 LAN 和路由器的 LAN 被桥在同一段，电脑会直接拿到光猫的 `192.168.1.x`，Orange Pi 并不会路由/NAT。
+
+固件首次启动时会执行 `files/etc/uci-defaults/99-orangepi-router`，改成：
+
+```text
+光猫 ── eth0 (WAN, DHCP) ── Orange Pi ── Wi-Fi AP (LAN, 192.168.44.1) ── 电脑/手机
+```
+
+- 光猫接 Orange Pi 网口
+- 电脑/手机连 Orange Pi 的 Wi-Fi（默认 SSID `OpenWrt`，以实际 `uci show wireless` 为准）
+- 浏览器访问 `http://192.168.44.1`
+- **不要再把电脑用网线接到 Zero 3 的网口**：那个口已经是 WAN
+- 如果需要“有线 LAN + 有线 WAN”，需要外接 USB 网卡；板载 UWE5622 不能同时做 STA + AP
+
+如果已经刷了旧镜像、想不重刷临时修正，可在串口/SSH 里执行：
+
+```sh
+i=0
+while uci -q get network.@device[$i] >/dev/null; do
+  [ "$(uci -q get network.@device[$i].name)" = "br-lan" ] && {
+    uci -q delete network.@device[$i].ports
+    uci set network.@device[$i].bridge_empty=1
+  }
+  i=$((i+1))
+done
+uci set network.lan.ipaddr=192.168.44.1
+uci set network.lan.netmask=255.255.255.0
+uci delete network.wan 2>/dev/null
+uci set network.wan=interface
+uci set network.wan.device=eth0
+uci set network.wan.proto=dhcp
+uci delete network.wan6 2>/dev/null
+uci set network.wan6=interface
+uci set network.wan6.device=eth0
+uci set network.wan6.proto=dhcpv6
+uci commit network
+/etc/init.d/network restart
+wifi reload
+```
+
 
 ## 1GB / 1.5GB 内存版（起不来先看这里）
 
