@@ -6,9 +6,10 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Default LAN IP: 192.168.1.1 -> 192.168.44.1
-# config_generate is the single source of the default LAN address baked into
-# /etc/config/network on first boot.
+# Bypass-router management IP: 192.168.1.1 -> 192.168.1.250
+# config_generate is the source of the default LAN address baked into
+# /etc/config/network; files/etc/uci-defaults/99-orangepi-bypass then disables
+# DHCP and fixes gateway/DNS. The main router stays 192.168.1.1.
 # ---------------------------------------------------------------------------
 CONFIG_GENERATE="package/base-files/files/bin/config_generate"
 [ -f "$CONFIG_GENERATE" ] || {
@@ -16,12 +17,12 @@ CONFIG_GENERATE="package/base-files/files/bin/config_generate"
 	exit 1
 }
 
-sed -i 's/192\.168\.1\.1/192.168.44.1/g' "$CONFIG_GENERATE"
-grep -q '192\.168\.44\.1' "$CONFIG_GENERATE" || {
+sed -i 's/192\.168\.1\.1/192.168.1.250/g' "$CONFIG_GENERATE"
+grep -q '192\.168\.1\.250' "$CONFIG_GENERATE" || {
 	echo "ERROR: failed to set default LAN IP" >&2
 	exit 1
 }
-echo "Default LAN IP set to 192.168.44.1"
+echo "Default LAN IP set to 192.168.1.250"
 
 # ---------------------------------------------------------------------------
 # No master / 6.18-specific overrides are applied:

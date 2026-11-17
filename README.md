@@ -8,55 +8,64 @@
 - 定位：**Orange Pi Zero 3 1GB 版专用精简代理软路由**。固件只保留代理栈、板载 Wi-Fi、iStore/quickstart、ttyd、UPnP、htop、iperf3，已剔除 Docker、Samba、aria2/AriaNg、adbyby、网易云解锁等与翻墙无关的重型套件。
 - 代理插件：**只保留 OpenClash**（Clash Meta 内核），以及 `dnsmasq-full`、`ruby`、`ip-full`、nftables TProxy 等必要依赖。PassWall / PassWall2 / SSR+ / xray / sing-box 等全部移除，减少固件体积和后台进程。
 - 内存优化：默认启用 `zram-swap`（`zram-swap` + `kmod-zram`），在 OpenClash 更新规则或大流量代理时以压缩内存充当 swap，降低 1GB 版 OOM 风险。
-- **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；如果无线不稳定，可以加 USB 网卡扩展有线 LAN（单网口已经作为 WAN）。
+- **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；旁路由模式下网口本身就是 LAN，Wi-Fi 不稳定时可以直接用有线。
 - **iStoreOS 风格体验**：iStore 应用商店（`luci-app-store`）+ 快捷向导首页（`luci-app-quickstart`）+ 简体中文界面（`luci-i18n-base-zh-cn` / `LUCI_LANG_zh_Hans`）。商店保持空置、按需安装，不会把 Docker 等重型应用预装进 1GB 内存。
 - 固件下载请前往 **Releases** 列表
-- 默认 IP：`192.168.44.1`（**Wi-Fi LAN**）；板载网口 `eth0` 作为 **WAN** 接光猫
+- 默认管理 IP：`192.168.1.250`（**旁路由 LAN，静态**）；主路由/光猫仍然是 `192.168.1.1`
 
 > 注意：`luci-app-store` / `luci-app-quickstart` 与 `quickstart` 来自 `kenzok8/openwrt-packages`，24.10 上游 luci 已不再提供；OpenClash 来自 24.10 luci feed。`kenzok8/small` feed 已整个移除。
 
-## 网络拓扑（单网口，务必看）
+## 网络拓扑（旁路由模式）
 
-Zero 3 只有一个以太网口，而 24.10 的 sunxi 默认把 `eth0` 放进 `br-lan`（相当于交换机/AP）。这样把光猫插到网口后，光猫的 LAN 和路由器的 LAN 被桥在同一段，电脑会直接拿到光猫的 `192.168.1.x`，Orange Pi 并不会路由/NAT。
-
-固件首次启动时会执行 `files/etc/uci-defaults/99-orangepi-router`，改成：
+Zero 3 作为旁路由接入主网，主路由/光猫继续做 DHCP 和网关：
 
 ```text
-光猫 ── eth0 (WAN, DHCP) ── Orange Pi ── Wi-Fi AP (LAN, 192.168.44.1) ── 电脑/手机
+主路由/光猫 192.168.1.1  (继续做 DHCP / 上网网关)
+   ├── 电脑 / 手机       192.168.1.x
+   └── Orange Pi Zero 3  192.168.1.250  (静态 IP，DHCP 关闭)
+          └── Wi-Fi AP   同一个 LAN
 ```
 
-- 光猫接 Orange Pi 网口
-- 电脑/手机连 Orange Pi 的 Wi-Fi（默认 SSID `ImmortalWrt`，默认无密码，以实际 `uci show wireless` 为准）
-- 浏览器访问 `http://192.168.44.1`
-- **不要再把电脑用网线接到 Zero 3 的网口**：那个口已经是 WAN
-- 如果需要“有线 LAN + 有线 WAN”，需要外接 USB 网卡；板载 UWE5622 不能同时做 STA + AP
+- **LuCI**：`http://192.168.1.250`
+- **SSH**：`ssh root@192.168.1.250`
+- 首次启动会自动执行 `files/etc/uci-defaults/99-orangepi-bypass`，并把管理地址打印到串口日志
+- Pi 的 DHCP 服务关闭，避免和主路由抢 DHCP；网口 `eth0` 和 Wi-Fi 都在 `br-lan`
+- Pi 自己的网关/DNS 指向 `192.168.1.1`
+- 已关闭 firewall 的 flow offloading，并关闭 ICMP redirect，避免客户端绕过旁路由/OpenClash
+- 要让客户端走 OpenClash：把客户端的 **网关和 DNS 都设为 `192.168.1.250`**；或者在主路由的 DHCP 里下发这两个值。只改网关不改 DNS 容易 DNS 泄漏或解析失败
+- 不想走代理的客户端保持网关 `192.168.1.1` 即可
+- Wi-Fi SSID `ImmortalWrt`，默认无密码
 
-如果已经刷了旧镜像、想不重刷临时修正，可在串口/SSH 里执行：
+如果已经刷了旧镜像、想不重刷临时改成旁路由，可在串口/SSH 执行：
 
 ```sh
 i=0
 while uci -q get network.@device[$i] >/dev/null; do
-  [ "$(uci -q get network.@device[$i].name)" = "br-lan" ] && {
-    uci -q delete network.@device[$i].ports
-    uci set network.@device[$i].bridge_empty=1
-  }
+  if [ "$(uci -q get network.@device[$i].name)" = "br-lan" ]; then
+    uci -q delete network.@device[$i].bridge_empty
+    ports="$(uci -q get network.@device[$i].ports)"
+    case " $ports " in *" eth0 "*) ;; *) uci add_list network.@device[$i].ports=eth0;; esac
+  fi
   i=$((i+1))
 done
-uci set network.lan.ipaddr=192.168.44.1
+uci set network.lan.device=br-lan
+uci set network.lan.proto=static
+uci set network.lan.ipaddr=192.168.1.250
 uci set network.lan.netmask=255.255.255.0
-uci delete network.wan 2>/dev/null
-uci set network.wan=interface
-uci set network.wan.device=eth0
-uci set network.wan.proto=dhcp
-uci delete network.wan6 2>/dev/null
-uci set network.wan6=interface
-uci set network.wan6.device=eth0
-uci set network.wan6.proto=dhcpv6
+uci set network.lan.gateway=192.168.1.1
+uci set network.lan.dns=192.168.1.1
+uci -q delete network.lan.ip6assign
+uci -q delete network.wan
+uci -q delete network.wan6
+uci set dhcp.lan.ignore=1
+uci set firewall.@defaults[0].flow_offloading=0
+uci set firewall.@defaults[0].flow_offloading_hw=0
 uci commit network
+uci commit dhcp
+uci commit firewall
 /etc/init.d/network restart
 wifi reload
 ```
-
 
 ## CPU 占用 100% 排查
 
@@ -80,7 +89,7 @@ dmesg | grep -iE 'sprdwl|tx err|wcn' | tail -30
   wifi reload
   ```
 
-  仍高的话，用串口执行 `wifi down` 对比 CPU；如果掉下来，就是无线驱动问题，建议加 USB 网卡做 LAN。
+  仍高的话，用串口执行 `wifi down` 对比 CPU；旁路由模式下有线口本身就在 LAN，可以直接用网线，不必依赖 Wi-Fi。
 
 - `quickstart` 高：iStore 快捷向导后台（`quickstart serve`）。不用向导可以停掉：
 

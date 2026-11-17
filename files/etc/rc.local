@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# Print the bypass-router management address on the serial console after
+# network is up. Reading it from UCI means the banner follows a later change
+# to network.lan.ipaddr as well.
+
+lan_ip="$(uci -q get network.lan.ipaddr)"
+[ -n "$lan_ip" ] || lan_ip="192.168.1.250"
+
+if [ -w /dev/console ]; then
+	{
+		echo
+		echo "=================================================="
+		echo " Orange Pi Zero 3 - bypass router"
+		echo " LuCI : http://$lan_ip"
+		echo " SSH  : ssh root@$lan_ip"
+		echo " Client gateway/DNS: $lan_ip"
+		echo "=================================================="
+		echo
+	} > /dev/console
+fi
+
+exit 0
