@@ -8,7 +8,7 @@
 - 定位：**Orange Pi Zero 3 1GB 版专用精简代理软路由**。固件只保留代理栈、板载 Wi-Fi、iStore/quickstart、ttyd、UPnP、htop、iperf3，已剔除 Docker、Samba、aria2/AriaNg、adbyby、网易云解锁等与翻墙无关的重型套件。
 - 代理插件：**OpenClash（核心）**、PassWall、PassWall2、SSR+，以及 `xray-core`、`sing-box`、`chinadns-ng`、`dns2socks`、`ipt2socks`、nftables TProxy 内核模块等依赖。
 - 内存优化：默认启用 `zram-swap`（`zram-swap` + `kmod-zram`），在 OpenClash 更新规则或大流量代理时以压缩内存充当 swap，降低 1GB 版 OOM 风险。
-- **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；稳定组网仍建议以有线为主。
+- **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；如果无线不稳定，可以加 USB 网卡扩展有线 LAN（单网口已经作为 WAN）。
 - **iStoreOS 风格体验**：iStore 应用商店（`luci-app-store`）+ 快捷向导首页（`luci-app-quickstart`）+ 简体中文界面（`luci-i18n-base-zh-cn` / `LUCI_LANG_zh_Hans`）。商店保持空置、按需安装，不会把 Docker 等重型应用预装进 1GB 内存。
 - 固件下载请前往 **Releases** 列表
 - 默认 IP：`192.168.44.1`（**Wi-Fi LAN**）；板载网口 `eth0` 作为 **WAN** 接光猫
@@ -26,7 +26,7 @@ Zero 3 只有一个以太网口，而 24.10 的 sunxi 默认把 `eth0` 放进 `b
 ```
 
 - 光猫接 Orange Pi 网口
-- 电脑/手机连 Orange Pi 的 Wi-Fi（默认 SSID `OpenWrt`，以实际 `uci show wireless` 为准）
+- 电脑/手机连 Orange Pi 的 Wi-Fi（默认 SSID `ImmortalWrt`，默认无密码，以实际 `uci show wireless` 为准）
 - 浏览器访问 `http://192.168.44.1`
 - **不要再把电脑用网线接到 Zero 3 的网口**：那个口已经是 WAN
 - 如果需要“有线 LAN + 有线 WAN”，需要外接 USB 网卡；板载 UWE5622 不能同时做 STA + AP
