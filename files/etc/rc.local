@@ -1,20 +1,25 @@
 #!/bin/sh
 #
-# Print the bypass-router management address on the serial console after
-# network is up. Reading it from UCI means the banner follows a later change
-# to network.lan.ipaddr as well.
+# Print the router-mode management address and Wi-Fi credentials on the
+# serial console after network is up. Values are read from UCI so the banner
+# follows later changes.
 
 lan_ip="$(uci -q get network.lan.ipaddr)"
-[ -n "$lan_ip" ] || lan_ip="192.168.1.250"
+[ -n "$lan_ip" ] || lan_ip="192.168.44.1"
+
+ssid="$(uci -q get 'wireless.@wifi-iface[0].ssid')"
+key="$(uci -q get 'wireless.@wifi-iface[0].key')"
+[ -n "$ssid" ] || ssid="OPi-Mini"
+[ -n "$key" ] || key="(open)"
 
 if [ -w /dev/console ]; then
 	{
 		echo
 		echo "=================================================="
-		echo " Orange Pi Zero 3 - bypass router"
+		echo " Orange Pi Zero 3 - router mode"
+		echo " Wi-Fi: $ssid / $key"
 		echo " LuCI : http://$lan_ip"
 		echo " SSH  : ssh root@$lan_ip"
-		echo " Client gateway/DNS: $lan_ip"
 		echo "=================================================="
 		echo
 	} > /dev/console

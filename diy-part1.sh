@@ -91,6 +91,16 @@ $(eval $(call BuildPackage,uwe5622-firmware))
 EOF
 fi
 
+# ---------------------------------------------------------------------------
+# Bundle the OpenClash Meta core. The package downloads the pinned aarch64
+# core tarball and installs it as /etc/openclash/core/clash_meta, so a fresh
+# image already has a working Clash core without visiting the update page.
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+rm -rf package/openclash-core
+cp -r "$SCRIPT_DIR/openclash-core" package/openclash-core
+test -f package/openclash-core/Makefile
+
 # Fail fast if the integration did not take.
 grep -q '^include unisoc\.mk$' package/kernel/mac80211/Makefile
 grep -q 'PATCH_DIR)/unisoc' package/kernel/mac80211/Makefile
