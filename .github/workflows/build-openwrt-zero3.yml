@@ -167,6 +167,7 @@ jobs:
           luci-app-store luci-app-quickstart luci-app-ttyd luci-app-upnp
           luci-i18n-base-zh-cn htop iperf3 zram-swap
           kmod-uwe5622 uwe5622-firmware
+          luci-compat luci-lua-runtime
         "
         for p in $required; do
           if grep -q "^CONFIG_PACKAGE_$p=y" .config; then
@@ -223,6 +224,20 @@ jobs:
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> "$GITHUB_ENV"
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> "$GITHUB_ENV"
+
+    - name: Verify LuCI Lua compat files in rootfs
+      run: |
+        cd openwrt
+        rootfs="$(ls -d staging_dir/target-*/root-* 2>/dev/null | head -1)"
+        [ -n "$rootfs" ] || { echo "FAIL: target rootfs not found"; exit 1; }
+        for f in usr/lib/lua/luci/cbi/datatypes.lua usr/lib/lua/luci/model/uci.lua; do
+          if [ -f "$rootfs/$f" ]; then
+            echo "OK: $f"
+          else
+            echo "FAIL: missing $f in $rootfs (luci-compat / luci-lua-runtime)"
+            exit 1
+          fi
+        done
 
     - name: Check space usage
       if: (!cancelled())
