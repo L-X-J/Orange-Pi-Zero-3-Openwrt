@@ -7,10 +7,10 @@
 - **定位**：1GB 内存版 Orange Pi Zero 3 专用的**精简旁路由 / 科学上网固件**
 - **源码**：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 分支，Linux 6.6 LTS
 - **代理**：只保留 **OpenClash**（Clash Meta 内核），PassWall / PassWall2 / SSR+ / xray / sing-box 全部移除
-- **网络角色**：旁路由，静态 `192.168.1.250`，自身 DHCP 关闭；主路由/光猫继续做 DHCP 和网关
-- **当前实测**：1GB 版本、旁路由 + OpenClash 正常运行时，**CPU 占用低于 30%**
-- **使用 OpenClash 的客户端必须把 DNS 改成 `192.168.1.250`**（网关也要改；只改网关不够，详见下文）
-- **默认管理地址**：`http://192.168.1.250` / `ssh root@192.168.1.250`
+- **网络角色**：默认旁路由（静态 `192.168.1.250`，自身 DHCP 关闭）；也可切换为主路由模式（`eth0=WAN`、Wi-Fi=LAN、`192.168.44.1`、DHCP 开启）
+- **当前实测**：1GB 版本、OpenClash 正常运行时（旁路由/路由模式），**CPU 占用低于 30%**
+- **旁路由模式**下，使用 OpenClash 的客户端必须把 DNS 改成 `192.168.1.250`（网关也要改）；**路由模式**由 Pi 的 DHCP 自动下发 `192.168.44.1`，不用手动改
+- **默认管理地址**：旁路由 `http://192.168.1.250`；路由模式 `http://192.168.44.1`
 
 ## 版本特点
 
@@ -19,14 +19,14 @@
 | 目标硬件 | Orange Pi Zero 3（H618），**当前按 1GB 版本裁剪和验证**；同一镜像也可用于 1.5GB / 2GB / 4GB |
 | 内核 | ImmortalWrt `openwrt-24.10` / Linux 6.6 LTS，避开旧 6.18 固件在 `S19firewall` 的 `__slab_free` panic |
 | 代理插件 | **OpenClash only**，以及 `dnsmasq-full`、`ruby`、`ip-full`、nftables TProxy 等必要依赖 |
-| 网络模式 | 旁路由：`eth0` 和 Wi-Fi AP 都在 `br-lan`，静态 `192.168.1.250/24`，DHCP/RA 关闭 |
+| 网络模式 | 默认旁路由：`eth0` + Wi-Fi 都在 `br-lan`，静态 `192.168.1.250/24`，DHCP/RA 关闭；可切换主路由模式（`eth0=WAN`、Wi-Fi=LAN、`192.168.44.1`、DHCP 开启） |
 | 内存优化 | `zram-swap` + `kmod-zram`，减轻 OpenClash 更新规则/大流量时的 OOM 风险 |
 | Wi-Fi | 板载 AW859A / UWE5622，通过 24.10/6.6 backport 驱动；Wi-Fi 为尽力支持 |
 | 管理工具 | iStore（`luci-app-store`）、quickstart、ttyd、UPnP、htop、iperf3、简体中文 |
 | 已剔除 | Docker、Samba、aria2/AriaNg、adbyby、网易云解锁、USB 打印、ZeroTier、WOL 等重型/无关套件 |
 | 构建校验 | workflow 会检查代理栈、LuCI Lua 运行库、自定义脚本的 UCI 引号，以及精简包是否被重新拉回 |
 
-> 目前 CPU 占用低于 30% 是 1GB 版本在旁路由 + OpenClash 场景下的实测结果；大流量、规则集很多或 Wi-Fi 驱动异常时仍可能升高，排查见下文。
+> 目前 CPU 占用低于 30% 是 1GB 版本在 OpenClash 正常运行时（旁路由/路由模式）的实测结果；大流量、规则集很多或 Wi-Fi 驱动异常时仍可能升高，排查见下文。
 >
 > iStore/quickstart 来自 `kenzok8/openwrt-packages`（24.10 上游 luci 已不再提供）；OpenClash 来自 24.10 luci feed；`kenzok8/small` feed 已移除。
 
@@ -39,6 +39,8 @@
 
 ## 快速开始
 
+> 下面默认按**旁路由模式**写；如果已经切到路由模式，访问 `http://192.168.44.1`，电脑保持 DHCP 即可。
+
 1. 刷入 Releases 里的镜像（建议 4GB 以上 SD 卡）
 2. 网线接主路由/交换机，确保电脑也在 `192.168.1.0/24`
 3. 浏览器打开 `http://192.168.1.250`，SSH 用 `ssh root@192.168.1.250`
@@ -47,7 +49,9 @@
 
 默认 Wi-Fi：SSID `ImmortalWrt`，无密码；旁路由模式下 Wi-Fi 客户端从主路由拿 DHCP。
 
-## 使用 OpenClash 必须改电脑的 DNS
+## 旁路由模式下：使用 OpenClash 必须改电脑的 DNS
+
+> 如果你已经切到**主路由模式**（LAN `192.168.44.1`、Pi 自己发 DHCP），电脑保持 DHCP 即可，不需要手动改 DNS；本节只适用于旁路由模式。
 
 旁路由模式下，OpenClash 只能接管“经过它”的流量和 DNS。电脑如果还使用主路由下发的 DNS（`192.168.1.1`），DNS 查询会直接在同网段发给 `192.168.1.1`，根本不经过 `192.168.1.250`，OpenClash 看不到，也就无法做 Fake-IP、分流和防污染。
 
@@ -170,6 +174,89 @@ uci commit firewall
 wifi reload
 ```
 
+## 切换到路由模式（主路由）
+
+默认固件是旁路由；如果你想让 Pi 自己做 NAT/DHCP、光猫只做 WAN 上游，按下面切。
+
+切换后：
+
+- `eth0` = WAN（接光猫/主路由 LAN）
+- Wi-Fi = LAN，`192.168.44.1/24`
+- Pi 开 DHCP，客户端自动拿 `192.168.44.x`，网关/DNS 自动 `192.168.44.1`
+- 管理地址变成 `192.168.44.1`
+- 网口变成 WAN，电脑要连 Pi 的 Wi-Fi（或外接 USB 网卡）才能进 LAN
+
+> 切换会改管理 IP，SSH 会断；最好用串口执行。
+>
+> 手动切换只在当前系统生效；重新刷机会再次执行 `99-orangepi-bypass` 回到旁路由。要默认路由模式，需要改这个脚本或加切换脚本。
+
+切换前先确认防火墙是干净的：
+
+```sh
+fw4 print 2>&1 | grep -E 'invalid|skipped' || echo 'firewall clean'
+```
+
+### 第 1 步：把 eth0 从 LAN 桥移出，br-lan 只留给 Wi-Fi
+
+```sh
+i=0; while uci -q get "network.@device[$i]" >/dev/null 2>&1; do [ "$(uci -q get "network.@device[$i].name")" = "br-lan" ] && { uci -q delete "network.@device[$i].ports"; uci set "network.@device[$i].bridge_empty=1"; }; i=$((i+1)); done
+```
+
+### 第 2 步：LAN 改成 192.168.44.1，去掉 LAN 的网关/DNS
+
+```sh
+uci set network.lan.device=br-lan; uci set network.lan.proto=static; uci set network.lan.ipaddr=192.168.44.1; uci set network.lan.netmask=255.255.255.0; uci set network.lan.ip6assign=60; uci -q delete network.lan.gateway; uci -q delete network.lan.dns; uci -q delete network.lan.ifname; uci -q delete network.lan.type; uci -q delete network.lan.ports
+```
+
+### 第 3 步：eth0 改成 WAN，走光猫 DHCP
+
+```sh
+uci -q delete network.wan; uci set network.wan=interface; uci set network.wan.device=eth0; uci set network.wan.proto=dhcp; uci -q delete network.wan6; uci set network.wan6=interface; uci set network.wan6.device=eth0; uci set network.wan6.proto=dhcpv6
+```
+
+### 第 4 步：打开 LAN DHCP/RA
+
+```sh
+uci set dhcp.lan.ignore=0; uci set dhcp.lan.dhcpv4=server; uci set dhcp.lan.dhcpv6=server; uci set dhcp.lan.ra=server; uci set dhcp.lan.start=100; uci set dhcp.lan.limit=150; uci set dhcp.lan.leasetime=12h
+```
+
+### 第 5 步：关闭 flow offloading（OpenClash 需要）
+
+```sh
+uci set firewall.@defaults[0].flow_offloading=0; uci set firewall.@defaults[0].flow_offloading_hw=0
+```
+
+### 第 6 步：提交配置
+
+```sh
+uci commit network; uci commit dhcp; uci commit firewall
+```
+
+### 第 7 步：重启网络和 Wi-Fi
+
+```sh
+/etc/init.d/network restart; wifi reload
+```
+
+> 执行后管理地址从 `192.168.1.250` 变成 `192.168.44.1`，SSH 会断。
+>
+> `wifi reload` 偶尔报 `Command failed: Not found`，只要 `phy0-ap0` 还在 forwarding 就可以忽略；必要时再执行 `/sbin/wifi reload`。
+
+### 第 8 步：重新连上后验证
+
+```sh
+ip -4 addr show br-lan; ip -4 addr show eth0; uci show network | grep -E 'lan\.(ipaddr|proto|device)|wan\.(proto|device)'
+```
+
+预期：
+
+- `br-lan` 是 `192.168.44.1/24`
+- `eth0` 从光猫拿到 `192.168.1.x`
+- 电脑访问 `http://192.168.44.1`、`ssh root@192.168.44.1`
+- 路由模式下 DHCP 自动下发 `44.1` 作为网关/DNS，电脑不用再手动改 DNS
+
+切回旁路由用上面的“手动改成旁路由”一节；管理地址会回到 `192.168.1.250`。
+
 ## 防火墙 LAN zone 修复
 
 如果 `fw4 print` 出现：
@@ -193,7 +280,7 @@ fw4 reload
 
 ## CPU 占用与异常排查
 
-当前 1GB 版本在旁路由 + OpenClash 正常运行时**实测 CPU 占用低于 30%**。如果出现持续高位，先看是谁在跑：
+当前 1GB 版本在 OpenClash 正常运行时（旁路由/路由模式）**实测 CPU 占用低于 30%**。如果出现持续高位，先看是谁在跑：
 
 ```sh
 top -bn1 | head -30
