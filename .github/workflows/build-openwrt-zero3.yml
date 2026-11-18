@@ -277,7 +277,8 @@ jobs:
         echo "- OpenClash-only 精简旁路由固件：静态 192.168.1.250，DHCP 关闭" >> release.txt
         echo "- 串口启动日志会打印 LuCI / SSH 管理地址" >> release.txt
         echo "- 已移除 PassWall / PassWall2 / SSR+ / xray / sing-box 等额外代理栈" >> release.txt
-        echo "- 1GB 内存优化：zram-swap 已启用；已移除 Docker / Samba / aria2 / adbyby / 网易云解锁" >> release.txt
+        echo "- 1GB 适配：旁路由 + OpenClash 实测 CPU < 30%，zram-swap 已启用" >> release.txt
+        echo "- 已移除 Docker / Samba / aria2 / adbyby / 网易云解锁" >> release.txt
         echo "- 板载 AW859A (UWE5622) Wi-Fi 驱动 + 固件（24.10/6.6 backport）" >> release.txt
         echo "- 若 1GB 版无法启动：接串口 115200 看 DRAM 那一行，排查表见 README" >> release.txt
         echo "status=success" >> "$GITHUB_OUTPUT"

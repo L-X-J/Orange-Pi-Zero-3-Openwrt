@@ -2,25 +2,56 @@
 
 香橙派 **Orange Pi Zero 3**（全志 H618，Cortex-A53）自动云编译 OpenWrt 固件。
 
-## 说明
+## 这个版本是什么
 
-- 源码：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 分支（Linux 6.6 LTS）。不再跟随 6.18 的 `master`，以避开旧固件在 `S19firewall` 阶段触发的 `__slab_free` panic。
-- 定位：**Orange Pi Zero 3 1GB 版专用精简代理软路由**。固件只保留代理栈、板载 Wi-Fi、iStore/quickstart、ttyd、UPnP、htop、iperf3，已剔除 Docker、Samba、aria2/AriaNg、adbyby、网易云解锁等与翻墙无关的重型套件。
-- 代理插件：**只保留 OpenClash**（Clash Meta 内核），以及 `dnsmasq-full`、`ruby`、`ip-full`、nftables TProxy 等必要依赖。PassWall / PassWall2 / SSR+ / xray / sing-box 等全部移除，减少固件体积和后台进程。
-- 内存优化：默认启用 `zram-swap`（`zram-swap` + `kmod-zram`），在 OpenClash 更新规则或大流量代理时以压缩内存充当 swap，降低 1GB 版 OOM 风险。
-- **板载 AW859A（UWE5622）Wi-Fi**：24.10 上游并不包含 `kmod-uwe5622` / `uwe5622-firmware`。`diy-part1.sh` 会按固定 commit 拉取 [DeepAQ/openwrt-uwe5622-sunxi](https://github.com/DeepAQ/openwrt-uwe5622-sunxi) 的 24.10/6.6 驱动补丁、固件与 Zero 2/Zero 3 DTS 节点。该驱动属于第三方 backport，Wi-Fi 为尽力支持；旁路由模式下网口本身就是 LAN，Wi-Fi 不稳定时可以直接用有线。
-- **iStoreOS 风格体验**：iStore 应用商店（`luci-app-store`）+ 快捷向导首页（`luci-app-quickstart`）+ 简体中文界面（`luci-i18n-base-zh-cn` / `LUCI_LANG_zh_Hans`）。商店保持空置、按需安装，不会把 Docker 等重型应用预装进 1GB 内存。
-- 固件下载请前往 **Releases** 列表
-- 默认管理 IP：`192.168.1.250`（**旁路由 LAN，静态**）；主路由/光猫仍然是 `192.168.1.1`
+- **定位**：1GB 内存版 Orange Pi Zero 3 专用的**精简旁路由 / 科学上网固件**
+- **源码**：[ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 分支，Linux 6.6 LTS
+- **代理**：只保留 **OpenClash**（Clash Meta 内核），PassWall / PassWall2 / SSR+ / xray / sing-box 全部移除
+- **网络角色**：旁路由，静态 `192.168.1.250`，自身 DHCP 关闭；主路由/光猫继续做 DHCP 和网关
+- **当前实测**：1GB 版本、旁路由 + OpenClash 正常运行时，**CPU 占用低于 30%**
+- **默认管理地址**：`http://192.168.1.250` / `ssh root@192.168.1.250`
 
-> 注意：`luci-app-store` / `luci-app-quickstart` 与 `quickstart` 来自 `kenzok8/openwrt-packages`，24.10 上游 luci 已不再提供；OpenClash 来自 24.10 luci feed。`kenzok8/small` feed 已整个移除。
+## 版本特点
+
+| 项目 | 说明 |
+|---|---|
+| 目标硬件 | Orange Pi Zero 3（H618），**当前按 1GB 版本裁剪和验证**；同一镜像也可用于 1.5GB / 2GB / 4GB |
+| 内核 | ImmortalWrt `openwrt-24.10` / Linux 6.6 LTS，避开旧 6.18 固件在 `S19firewall` 的 `__slab_free` panic |
+| 代理插件 | **OpenClash only**，以及 `dnsmasq-full`、`ruby`、`ip-full`、nftables TProxy 等必要依赖 |
+| 网络模式 | 旁路由：`eth0` 和 Wi-Fi AP 都在 `br-lan`，静态 `192.168.1.250/24`，DHCP/RA 关闭 |
+| 内存优化 | `zram-swap` + `kmod-zram`，减轻 OpenClash 更新规则/大流量时的 OOM 风险 |
+| Wi-Fi | 板载 AW859A / UWE5622，通过 24.10/6.6 backport 驱动；Wi-Fi 为尽力支持 |
+| 管理工具 | iStore（`luci-app-store`）、quickstart、ttyd、UPnP、htop、iperf3、简体中文 |
+| 已剔除 | Docker、Samba、aria2/AriaNg、adbyby、网易云解锁、USB 打印、ZeroTier、WOL 等重型/无关套件 |
+| 构建校验 | workflow 会检查代理栈、LuCI Lua 运行库、自定义脚本的 UCI 引号，以及精简包是否被重新拉回 |
+
+> 目前 CPU 占用低于 30% 是 1GB 版本在旁路由 + OpenClash 场景下的实测结果；大流量、规则集很多或 Wi-Fi 驱动异常时仍可能升高，排查见下文。
+>
+> iStore/quickstart 来自 `kenzok8/openwrt-packages`（24.10 上游 luci 已不再提供）；OpenClash 来自 24.10 luci feed；`kenzok8/small` feed 已移除。
+
+## 当前适配硬件
+
+- **Orange Pi Zero 3 1GB**：当前固件就是按这个容量做的裁剪和验证
+- 1.5GB / 2GB / 4GB 使用同一镜像，不需要按容量选版本
+- 板载 AW859A（UWE5622）Wi-Fi：24.10 上游不包含该驱动，`diy-part1.sh` 会拉取固定 commit 的 24.10/6.6 backport
+- 旁路由模式下网口本身就是 LAN，Wi-Fi 不稳定时可以直接用有线
+
+## 快速开始
+
+1. 刷入 Releases 里的镜像（建议 4GB 以上 SD 卡）
+2. 网线接主路由/交换机，确保电脑也在 `192.168.1.0/24`
+3. 浏览器打开 `http://192.168.1.250`，SSH 用 `ssh root@192.168.1.250`
+4. 要让某台设备走 OpenClash：把它的 **网关和 DNS 都设为 `192.168.1.250`**
+5. 不想走代理的设备保持网关 `192.168.1.1` 即可
+
+默认 Wi-Fi：SSID `ImmortalWrt`，无密码；旁路由模式下 Wi-Fi 客户端从主路由拿 DHCP。
 
 ## 网络拓扑（旁路由模式）
 
-Zero 3 作为旁路由接入主网，主路由/光猫继续做 DHCP 和网关：
+主路由/光猫继续做 DHCP 和上网网关，Zero 3 作为同网段的旁路由：
 
 ```text
-主路由/光猫 192.168.1.1  (继续做 DHCP / 上网网关)
+主路由/光猫 192.168.1.1  (DHCP / 上网网关)
    ├── 电脑 / 手机       192.168.1.x
    └── Orange Pi Zero 3  192.168.1.250  (静态 IP，DHCP 关闭)
           └── Wi-Fi AP   同一个 LAN
@@ -28,15 +59,16 @@ Zero 3 作为旁路由接入主网，主路由/光猫继续做 DHCP 和网关：
 
 - **LuCI**：`http://192.168.1.250`
 - **SSH**：`ssh root@192.168.1.250`
-- 首次启动会自动执行 `files/etc/uci-defaults/99-orangepi-bypass`，并把管理地址打印到串口日志
-- Pi 的 DHCP 服务关闭，避免和主路由抢 DHCP；网口 `eth0` 和 Wi-Fi 都在 `br-lan`
+- 首次启动自动执行 `files/etc/uci-defaults/99-orangepi-bypass`，串口会打印管理地址
+- Pi 的 DHCP 服务关闭，避免和主路由抢 DHCP；`eth0` 和 Wi-Fi 都在 `br-lan`
 - Pi 自己的网关/DNS 指向 `192.168.1.1`
-- 已关闭 firewall 的 flow offloading，并关闭 ICMP redirect，避免客户端绕过旁路由/OpenClash
-- 要让客户端走 OpenClash：把客户端的 **网关和 DNS 都设为 `192.168.1.250`**；或者在主路由的 DHCP 里下发这两个值。只改网关不改 DNS 容易 DNS 泄漏或解析失败
-- 不想走代理的客户端保持网关 `192.168.1.1` 即可
-- Wi-Fi SSID `ImmortalWrt`，默认无密码
+- 已关闭 firewall flow offloading 和 ICMP redirect，避免客户端绕过 OpenClash
+- 客户端要把 **网关 + DNS** 都设为 `192.168.1.250`；只改网关不改 DNS 容易 DNS 泄漏/解析失败
+- 主路由的 DHCP 池如果包含 `192.168.1.250`，请把 250 排除/保留
 
-如果已经刷了旧镜像、想不重刷临时改成旁路由，可在串口/SSH 执行：
+## 手动改成旁路由（旧镜像）
+
+如果已经刷了旧镜像、暂时不想重刷，可在串口/SSH 执行：
 
 ```sh
 i=0
@@ -54,6 +86,8 @@ uci set network.lan.ipaddr=192.168.1.250
 uci set network.lan.netmask=255.255.255.0
 uci set network.lan.gateway=192.168.1.1
 uci set network.lan.dns=192.168.1.1
+uci -q delete network.lan.ifname
+uci -q delete network.lan.type
 uci -q delete network.lan.ip6assign
 uci -q delete network.wan
 uci -q delete network.wan6
@@ -67,14 +101,16 @@ uci commit firewall
 wifi reload
 ```
 
-如果 `fw4 print` 出现类似：
+## 防火墙 LAN zone 修复
+
+如果 `fw4 print` 出现：
 
 ```text
 Section @zone[0] (lan) option 'input' specifies invalid value ''ACCEPT''
 Section @zone[0] (lan) skipped due to invalid options
 ```
 
-说明 `lan` zone 的 `input/output/forward` 被写成了带单引号的 `'ACCEPT'`，LAN 会被整段跳过，表现就是 Pi 能 ping 电脑、电脑访问不了 Pi。修复：
+说明 `lan` zone 的 `input/output/forward` 被写成了带单引号的 `'ACCEPT'`，整个 LAN zone 会被跳过，表现就是 **Pi 能 ping 电脑、电脑访问不了 Pi**。修复：
 
 ```sh
 uci set firewall.@zone[0].input=ACCEPT
@@ -84,11 +120,11 @@ uci commit firewall
 fw4 reload
 ```
 
-（先确认 `@zone[0]` 是 `lan`；不是的话把下标换成对应的 zone。）
+先确认 `@zone[0]` 是 `lan`；不是的话把下标换成对应 zone。
 
-## CPU 占用 100% 排查
+## CPU 占用与异常排查
 
-固件裁剪只能减少“没在运行”的包，CPU 100% 需要先看是哪个进程/内核线程。登录后执行：
+当前 1GB 版本在旁路由 + OpenClash 正常运行时**实测 CPU 占用低于 30%**。如果出现持续高位，先看是谁在跑：
 
 ```sh
 top -bn1 | head -30
@@ -98,7 +134,7 @@ dmesg | grep -iE 'sprdwl|tx err|wcn' | tail -30
 
 按结果处理：
 
-- `ksoftirqd` / `sprdwl` 高：UWE5622 Wi-Fi 驱动在 AP 模式下忙。先用 2.4G 试试：
+- `ksoftirqd` / `sprdwl` 高：UWE5622 Wi-Fi 驱动在 AP 模式下忙。先切 2.4G：
 
   ```sh
   uci set wireless.radio0.band='2g'
@@ -108,25 +144,43 @@ dmesg | grep -iE 'sprdwl|tx err|wcn' | tail -30
   wifi reload
   ```
 
-  仍高的话，用串口执行 `wifi down` 对比 CPU；旁路由模式下有线口本身就在 LAN，可以直接用网线，不必依赖 Wi-Fi。
+  仍高的话用串口 `wifi down` 对比；旁路由模式下有线口本身在 LAN，可以直接用网线。
 
-- `quickstart` 高：iStore 快捷向导后台（`quickstart serve`）。不用向导可以停掉：
+- `quickstart` 高：iStore 快捷向导后台。不用向导可以停掉：
 
   ```sh
   /etc/init.d/quickstart stop
   /etc/init.d/quickstart disable
   ```
 
-- `clash` / `openclash` 高：OpenClash 已启用但规则/订阅/DNS 有环路，先在 LuCI 停止 OpenClash，或串口 `/etc/init.d/openclash stop` 对比。
+- `clash` / `openclash` 高：规则/订阅/DNS 有环路。先在 LuCI 停止 OpenClash，或串口 `/etc/init.d/openclash stop` 对比。
 
-- `dnsmasq` 高：通常是 OpenClash 的 DNS 劫持/上游配置成环，检查 OpenClash 的 DNS 设置。
+- `dnsmasq` 高：通常是 OpenClash DNS 劫持/上游成环，检查 OpenClash 的 DNS 设置。
 
-- `taskd`/`istore`：iStore 本身很轻，但如果确认是它，下一版可以把 iStore/quickstart 一并裁掉。
+- `taskd` / `istore`：iStore 本身很轻；如果确认是它，下一版可以把 iStore/quickstart 一并裁掉。
 
-## 1GB / 1.5GB 内存版（起不来先看这里）
+## 常见问题
 
-1GB、1.5GB、2GB、4GB 是同一块板子的不同内存容量，固件是**同一份镜像**，不需要按容量选版本。
-真正容易出问题的是 U-Boot 的 DRAM 探测，不是 OpenWrt 本身：
+### 打开 LuCI 报 `module 'luci.cbi.datatypes' not found`
+
+这是 LuCI 的 Lua 兼容层缺失（`luci-compat` / `luci-lua-runtime`）。SSH 执行：
+
+```sh
+opkg update
+opkg install luci-compat luci-lua-runtime
+rm -rf /tmp/luci-*
+/etc/init.d/uhttpd restart
+```
+
+最新固件已经显式包含这两个包，并在构建后校验 rootfs 里的 `luci/cbi/datatypes.lua` 和 `luci/model/uci.lua`。
+
+### `fw4 print` 提示 `lan` zone 的 `input` 值是 `''ACCEPT''`
+
+见上面的“防火墙 LAN zone 修复”。
+
+## 1GB 启动与刷写注意
+
+本固件针对 **1GB 版本** 裁剪和验证，但同一镜像也适用于 1.5GB / 2GB / 4GB。真正容易出问题的是 U-Boot 的 DRAM 探测，不是 OpenWrt 本身：
 
 - 老 U-Boot（OpenWrt 23.05 / 24.10 用的 2024.01）经常把 **1GB 认成 2GB**，内核按 2GB 建页表，
   一碰到 1GB 以上的地址就 panic / 卡死；1.5GB 板更典型（已知问题，见 OpenWrt #18087、DietPi #7242）。
@@ -134,11 +188,11 @@ dmesg | grep -iE 'sprdwl|tx err|wcn' | tail -30
   因此 1GB 误判风险依然存在；**不要**把它当成"1GB 版随便刷"的保证。串口看到 `DRAM: 2048 MiB`
   而板子是 1GB 时，先加 `mem=1024M` 救急，长期方案是换用新版 U-Boot。
 
-仍然起不来时，接串口（**115200 8N1**，Zero 3 的 debug UART 是板边 3 pin）看前几行，按现象分三类：
+仍然起不来时，接串口（**115200 8N1**，Zero 3 的 debug UART 是板边 3 pin）看前几行：
 
 | 串口现象 | 结论 | 处理 |
 |---|---|---|
-| 完全没有输出，或只有 `U-Boot SPL 20xx.xx` 一行就停 | SPL 阶段 DRAM 初始化失败（时序/供电） | 换 5V/2A 以上电源、换卡重写；仍不行需要 720MHz 版 U-Boot（见下） |
+| 完全没有输出，或只有 `U-Boot SPL 20xx.xx` 一行就停 | SPL 阶段 DRAM 初始化失败（时序/供电） | 换 5V/2A 以上电源、换卡重写；仍不行需要 720MHz 版 U-Boot |
 | 打印 `DRAM: 2048 MiB` 而板子是 1GB | 容量仍是误判 | 用新版 U-Boot；临时可在 bootargs 里加 `mem=1024M` 救急 |
 | 打印 `DRAM: 1024 MiB` 后卡住 | 不是内存问题 | 见下面三条刷写错误 |
 
@@ -153,10 +207,13 @@ dmesg | grep -iE 'sprdwl|tx err|wcn' | tail -30
 - 源码有更新时每 18 小时自动检查并触发编译（Update Checker）
 - 也可在 Actions 页面手动运行 `Build OpenWrt Zero 3`
 - 编译完成后自动上传 Release（仅编译成功才发布），自动保留最近 3 个版本
+- 构建时会校验代理栈、`luci-compat` / `luci-lua-runtime`、自定义 UCI 脚本引号和精简包是否被重新拉回
 
 ## 自定义插件
 
 Fork 后修改 `orange-pi-zero3.config` 中的 `CONFIG_PACKAGE_*` 即可。
+
+1GB 版本请谨慎增加常驻服务，新增插件会直接占用内存和 CPU。
 
 ## 致谢
 
