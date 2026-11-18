@@ -67,6 +67,25 @@ uci commit firewall
 wifi reload
 ```
 
+如果 `fw4 print` 出现类似：
+
+```text
+Section @zone[0] (lan) option 'input' specifies invalid value ''ACCEPT''
+Section @zone[0] (lan) skipped due to invalid options
+```
+
+说明 `lan` zone 的 `input/output/forward` 被写成了带单引号的 `'ACCEPT'`，LAN 会被整段跳过，表现就是 Pi 能 ping 电脑、电脑访问不了 Pi。修复：
+
+```sh
+uci set firewall.@zone[0].input=ACCEPT
+uci set firewall.@zone[0].output=ACCEPT
+uci set firewall.@zone[0].forward=ACCEPT
+uci commit firewall
+fw4 reload
+```
+
+（先确认 `@zone[0]` 是 `lan`；不是的话把下标换成对应的 zone。）
+
 ## CPU 占用 100% 排查
 
 固件裁剪只能减少“没在运行”的包，CPU 100% 需要先看是哪个进程/内核线程。登录后执行：

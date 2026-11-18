@@ -37,6 +37,29 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Lint custom scripts
+      run: |
+        bash -n "$DIY_P1_SH" "$DIY_P2_SH"
+        for f in files/etc/uci-defaults/*; do
+          bash -n "$f"
+        done
+        python3 - <<'PY'
+        import glob, re, sys
+        bad = []
+        for f in glob.glob('files/etc/uci-defaults/*'):
+            for i, line in enumerate(open(f, encoding='utf-8'), 1):
+                # uci set "key='VALUE'" stores the single quotes as part of the
+                # value; fw4 then treats e.g. zone.input as invalid.
+                if re.search(r'uci\s+set\s+"[^"]*=\'', line):
+                    bad.append(f'{f}:{i}: {line.strip()}')
+        if bad:
+            print('FAIL: single quotes inside a double-quoted uci set value')
+            print('\n'.join(bad))
+            sys.exit(1)
+        print('OK: custom scripts linted')
+        PY
+
+
     - name: Clean up disk space
       run: |
         sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
